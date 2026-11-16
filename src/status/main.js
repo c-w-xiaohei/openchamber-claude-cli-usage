@@ -43,6 +43,9 @@ for (const name of ['5h', '7d']) {
   const label = cell('name');
   label.textContent = name;
   const reset = cell('reset');
+  const resetDate = document.createElement('span');
+  const resetTime = document.createElement('span');
+  reset.append(resetDate, resetTime);
   const countdown = cell('countdown');
   const meter = document.createElement('span');
   meter.className = 'meter';
@@ -56,7 +59,7 @@ for (const name of ['5h', '7d']) {
   const percent = cell('percent');
   row.append(label, reset, countdown, meter, percent);
   grid.append(row);
-  cells.set(name, { row, reset, countdown, meter, fill, percent });
+  cells.set(name, { row, reset, resetDate, resetTime, countdown, meter, fill, percent });
 }
 
 function publishControls() {
@@ -87,7 +90,9 @@ function render() {
     const used = typeof window.usedPercent === 'number' && Number.isFinite(window.usedPercent)
       ? Math.min(100, Math.max(0, window.usedPercent)) : null;
     elements.row.dataset.tone = used >= 90 ? 'error' : used >= 75 ? 'warning' : 'default';
-    elements.reset.textContent = resetLabel(window.resetAt);
+    const [date, time = ''] = resetLabel(window.resetAt).split(' ');
+    elements.resetDate.textContent = date;
+    elements.resetTime.textContent = time;
     elements.reset.title = validTime(window.resetAt) ? `Resets ${new Date(window.resetAt).toLocaleString(locale)}` : 'Reset time unavailable';
     elements.countdown.textContent = remaining(window.resetAt);
     elements.countdown.title = 'Time until reset';
