@@ -347,26 +347,30 @@ const slug = (text, fallback = 'x') => {
   return clean || fallback;
 };
 
-const windowRow = (id, label, window) => {
+/**
+ * One window = one bar line + one muted note under it. The bar line stays
+ * short ("Session (5h)" · 20%) so nothing truncates; the note carries the
+ * reset moment and the countdown ("resets 5:20 PM · in 2h 41m").
+ */
+const windowRows = (id, label, window) => {
   const used = window?.usedPercent ?? null;
-  const resetShort = fmtResetShort(window?.resetAt);
-  const countdown = fmtCountdown(window?.resetAt);
-  const resetText = resetShort
-    ? countdown ? ` · ${resetShort} · ${countdown}` : ` · ${resetShort}`
-    : '';
-  const row = {
+  const rows = [{
     kind: 'line',
-    id,
-    label: `${label}${resetText}`,
+    id: `${id}-bar`,
+    label,
     dot: percentTone(used),
     tooltip: [window?.valueLabel, fmtReset(window?.resetAt)].filter(Boolean).join(' · ') || undefined,
     value: used !== null
       ? `${Math.round(used)}%`
       : (window?.valueLabel ?? '—'),
     valueTone: percentTone(used),
-  };
-  if (used !== null) row.content = { kind: 'bar', value: used, tone: percentTone(used) };
-  return row;
+  }];
+  if (used !== null) rows[0].content = { kind: 'bar', value: used, tone: percentTone(used) };
+  const resetShort = fmtResetShort(window?.resetAt);
+  const countdown = fmtCountdown(window?.resetAt);
+  const note = [resetShort && `resets ${resetShort}`, countdown].filter(Boolean).join(' · ');
+  if (note) rows.push({ kind: 'note', id: `${id}-reset`, text: note, tone: 'muted' });
+  return rows;
 };
 
 /** The `GuestStatusView` the Work Status section draws from the last read. */
@@ -387,7 +391,7 @@ const statusView = () => {
   }
 
   for (const [key, window] of Object.entries(usage.windows ?? {})) {
-    rows.push(windowRow(`w-${slug(key)}`, WINDOW_TITLES[key] ?? key, window));
+    rows.push(...windowRows(`w-${slug(key)}`, WINDOW_TITLES[key] ?? key, window));
   }
   // Per-model windows (e.g. "Current week (Fable)") stay in the /quota answer
   // for the Usage page card; the compact section leaves them out.
