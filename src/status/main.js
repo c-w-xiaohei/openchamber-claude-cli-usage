@@ -18,9 +18,9 @@ let height = -1;
 const pad = (value) => String(value).padStart(2, '0');
 const validTime = (value) => typeof value === 'number' && Number.isFinite(value) && value > 0;
 const freshness = (cachedAt, now = Date.now()) => {
-  if (typeof cachedAt !== 'number' || !Number.isFinite(cachedAt) || cachedAt <= 0) return { label: 'Not updated yet', stale: false };
+  if (typeof cachedAt !== 'number' || !Number.isFinite(cachedAt) || cachedAt <= 0) return { label: '' };
   const minutes = Math.max(0, Math.floor((now - cachedAt) / 60000));
-  return { label: `Updated ${minutes < 1 ? '<1' : minutes} min ago`, stale: minutes >= 5 };
+  return { label: minutes < 1 ? '' : `${minutes}m ago` };
 };
 const resetLabel = (value) => {
   if (!validTime(value)) return '—';
@@ -72,9 +72,9 @@ for (const name of ['5h', '7d']) {
 function publishControls() {
   const age = freshness(snapshot?.cachedAt);
   const busy = requestingRefresh || Boolean(snapshot?.inflight);
-  const ageLabel = `${age.label}${age.stale ? '; refresh suggested' : ''}`;
+  const ageLabel = age.label;
   if (updated.textContent !== ageLabel) updated.textContent = ageLabel;
-  updated.dataset.stale = String(age.stale);
+  updated.hidden = !ageLabel;
   const fullTime = validTime(snapshot?.cachedAt) ? new Date(snapshot.cachedAt).toLocaleString(locale) : 'never';
   const detail = `Updated ${fullTime}${snapshot?.lastAttempt?.error ? `\n${snapshot.lastAttempt.error}` : ''}`;
   updated.title = detail;
