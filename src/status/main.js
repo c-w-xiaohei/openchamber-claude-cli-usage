@@ -12,6 +12,10 @@ let started = false;
 let locale = 'en';
 let requestingRefresh = false;
 let controlsKey = '';
+let spinTimer = null;
+let spinFrame = 0;
+// Classic braille spinner: header buttons take text only, so the animation is the label.
+const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 let height = -1;
 
 const pad = (value) => String(value).padStart(2, '0');
@@ -69,12 +73,20 @@ for (const name of ['5h', '7d']) {
 }
 
 // The refresh control lives in the section header the host draws, so the
-// frame holds only the two rows. Header buttons take plain text:
-// "Refresh", "6m ago" once the data is a full minute old, "Reading…" while a read runs.
+// frame holds only the two rows. Idle: "↻" or "↻ 6m" (age after a full
+// minute). Reading: the braille spinner replaces "↻", same width, button disabled.
 function publishControls() {
   const busy = requestingRefresh || Boolean(snapshot?.inflight);
-  const { label: age } = freshness(snapshot?.cachedAt);
-  const controls = [{ kind: 'button', id: 'refresh', label: busy ? 'Reading…' : age || 'Refresh', disabled: busy }];
+  if (busy && spinTimer === null) {
+    spinTimer = setInterval(() => { spinFrame = (spinFrame + 1) % SPIN.length; publishControls(); }, 120);
+  } else if (!busy && spinTimer !== null) {
+    clearInterval(spinTimer);
+    spinTimer = null;
+  }
+  const { minutes } = freshness(snapshot?.cachedAt);
+  const icon = busy ? SPIN[spinFrame] : '↻';
+  const label = minutes >= 1 ? `${icon} ${minutes}m` : icon;
+  const controls = [{ kind: 'button', id: 'refresh', label, disabled: busy }];
   const key = JSON.stringify(controls);
   if (key === controlsKey) return;
   controlsKey = key;
