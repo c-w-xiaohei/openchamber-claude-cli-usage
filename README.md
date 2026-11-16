@@ -21,9 +21,9 @@ stdio relay — and parses the report.
   bar, and percentage. Text columns have fixed widths; the bar fills the
   remaining space. Per-model rows are omitted.
 - Uses the official SDK's `connectHost` and `applyHostReady` for communication,
-  theme, fonts, and sizing. Refresh sits in the section header (no extra row):
-  `↻` shows when data is under a minute old, `↻ 6m` after that, and the glyph
-  cycles while the CLI is reading. There is no independent rail panel.
+  theme, fonts, and sizing. Refresh is a text button in the section header (no extra row):
+  `Refresh`, `6m ago` once the data is a full minute old, and `Reading…`
+  while the CLI runs. There is no independent rail panel.
 - On each read the host spawns `service/main.js` and posts `usage.read`; the
   service runs `<cli> -p "/usage" --output-format json` and maps the report
   onto the built-in window names so the card looks like a built-in's:

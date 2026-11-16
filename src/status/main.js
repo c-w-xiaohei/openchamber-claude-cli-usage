@@ -12,9 +12,6 @@ let started = false;
 let locale = 'en';
 let requestingRefresh = false;
 let controlsKey = '';
-let spinTimer = null;
-let spinFrame = 0;
-const SPIN = ['◐', '◓', '◑', '◒'];
 let height = -1;
 
 const pad = (value) => String(value).padStart(2, '0');
@@ -72,19 +69,12 @@ for (const name of ['5h', '7d']) {
 }
 
 // The refresh control lives in the section header the host draws, so the
-// frame itself holds only the two rows. Header buttons take text only: the
-// glyph cycles while a read runs, then shows "↻" or "↻ 6m" (age after a full minute).
+// frame holds only the two rows. Header buttons take plain text:
+// "Refresh", "6m ago" once the data is a full minute old, "Reading…" while a read runs.
 function publishControls() {
   const busy = requestingRefresh || Boolean(snapshot?.inflight);
-  if (busy && spinTimer === null) {
-    spinTimer = setInterval(() => { spinFrame = (spinFrame + 1) % SPIN.length; publishControls(); }, 250);
-  } else if (!busy && spinTimer !== null) {
-    clearInterval(spinTimer);
-    spinTimer = null;
-  }
-  const { minutes } = freshness(snapshot?.cachedAt);
-  const label = busy ? SPIN[spinFrame] : minutes >= 1 ? `↻ ${minutes}m` : '↻';
-  const controls = [{ kind: 'button', id: 'refresh', label, disabled: busy }];
+  const { label: age } = freshness(snapshot?.cachedAt);
+  const controls = [{ kind: 'button', id: 'refresh', label: busy ? 'Reading…' : age || 'Refresh', disabled: busy }];
   const key = JSON.stringify(controls);
   if (key === controlsKey) return;
   controlsKey = key;
