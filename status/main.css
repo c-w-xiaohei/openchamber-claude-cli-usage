@@ -5,8 +5,8 @@ body { font-family: var(--oc-font); }
 #root { container-type: inline-size; padding: 0 .25rem; }
 .usage-grid {
   display: grid;
-  grid-template-columns: 2ch minmax(11ch, 1fr) 5.5ch clamp(1.5rem, 12cqi, 2.5rem) 4ch;
-  column-gap: .375rem;
+  grid-template-columns: 2ch 11ch 5ch minmax(0, 1fr) 4ch;
+  column-gap: .5rem;
   align-items: center;
   font-family: var(--oc-mono);
   font-size: .857143rem;
@@ -16,7 +16,7 @@ body { font-family: var(--oc-font); }
 .cell { display: flex; align-items: center; min-width: 0; min-height: 1.857143rem; white-space: nowrap; }
 .reset, .countdown { color: var(--oc-muted); }
 .countdown, .percent { justify-content: flex-end; }
-.meter { height: .285714rem; border-radius: 1rem; background: color-mix(in srgb, var(--oc-fg) 15%, transparent); overflow: hidden; }
+.meter { min-width: 0; height: .285714rem; border-radius: 1rem; background: color-mix(in srgb, var(--oc-fg) 15%, transparent); overflow: hidden; }
 .fill { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--oc-muted); }
 [data-tone="warning"] .fill { background: var(--oc-warning); }
 [data-tone="warning"] .percent { color: var(--oc-warning-text, var(--oc-warning)); }
@@ -26,5 +26,5 @@ body { font-family: var(--oc-font); }
 #message[data-error="true"] { color: var(--oc-error-text, var(--oc-error)); }
 ::selection { background: var(--oc-selection); color: var(--oc-selection-fg); }
 @container (max-width: 19rem) {
-  .usage-grid { column-gap: .285714rem; grid-template-columns: 2ch minmax(11ch, 1fr) 5.5ch 1.714286rem 4ch; }
+  .usage-grid { column-gap: .285714rem; }
 }

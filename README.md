@@ -17,8 +17,9 @@ stdio relay — and parses the report.
   card on the Usage page, in the header and in Work Status.
 - Draws two aligned rows inside Work Status through
   `contributes.statusSection.entry`. A shared five-column CSS Grid shows
-  window (`5h` / `7d`), local reset time (`MM-DD HH:mm`), countdown, a short
-  progress bar, and percentage. Per-model rows are omitted.
+  window (`5h` / `7d`), local reset time (`MM-DD HH:mm`), countdown, progress
+  bar, and percentage. Text columns have fixed widths; the bar fills the
+  remaining space. Per-model rows are omitted.
 - Uses the official SDK's `connectHost` and `applyHostReady` for communication,
   theme, fonts, and sizing. Refresh lives in the section header; hovering the
   grid shows the last update time. There is no independent rail panel.
