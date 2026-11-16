@@ -290,11 +290,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // ---------------- Work Status view ----------------
 
 const WINDOW_TITLES = {
-  '5h': 'Session (5h)',
-  '7d': 'Weekly',
-  '1d': 'Daily',
-  monthly: 'Monthly',
-  extra_usage: 'Extra usage',
+  '5h': '5h',
+  '7d': '7d',
+  '1d': '1d',
+  monthly: 'Month',
+  extra_usage: 'Extra',
   credits_balance: 'Credits',
 };
 
