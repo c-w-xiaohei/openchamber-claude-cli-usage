@@ -24,6 +24,11 @@ stdio relay — and parses the report.
   - `Extra usage` → `extra_usage` window (`$used / $limit`)
 - `resetAt` is parsed from `resets <Mon> <D>, <h>:<mm><am|pm>` with the
   optional `(America/Los_Angeles)` zone; the year is inferred.
+- Host `usage.read` has a 20 s deadline but a CLI behind a relay can take
+  ~30 s, so reads answer from the last good result
+  (`~/.config/claude-cli-usage/last-usage.json`, fresh for 60 s) and the CLI
+  refresh runs in the background. Only a cold start ever waits — up to 17 s —
+  and reports "still answering" rather than missing the deadline.
 
 ## Choosing the CLI
 

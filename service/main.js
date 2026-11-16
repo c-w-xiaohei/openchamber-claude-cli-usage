@@ -36,8 +36,14 @@ if (!PORT || !TOKEN) {
 }
 
 const QUOTA_PATH = '/quota';
-const CLI_TIMEOUT_MS = 15_000; // under the host's 20 s usage.read deadline
+// The host answers usage.read with a 20 s deadline, but a CLI behind a relay
+// can take ~30 s. So reads answer from the last good result and refreshes run
+// in the background; only a cold start ever waits, and never past the wire.
+const CLI_TIMEOUT_MS = 45_000;
+const ANSWER_WAIT_MS = 17_000;
+const FRESH_MS = 60_000;
 const OVERRIDE_FILE = path.join(os.homedir(), '.config', 'claude-cli-usage', 'cli-path');
+const CACHE_FILE = path.join(os.homedir(), '.config', 'claude-cli-usage', 'last-usage.json');
 
 const SESSION_WINDOW_SECONDS = 5 * 60 * 60;
 const WEEKLY_WINDOW_SECONDS = 7 * 24 * 60 * 60;
@@ -184,7 +190,37 @@ const failure = (error, { configured = true } = {}) => ({
   usage: null,
 });
 
-const readUsage = async () => {
+const isUsageData = (data) =>
+  Boolean(data) && data.ok === true && typeof data === 'object'
+  && typeof data.usage === 'object' && data.usage !== null
+  && typeof data.usage.windows === 'object' && data.usage.windows !== null;
+
+const loadCache = () => {
+  try {
+    const stored = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+    if (isUsageData(stored?.data) && Number.isFinite(stored?.at)) {
+      return { data: stored.data, at: stored.at };
+    }
+  } catch {
+    // no usable cache yet
+  }
+  return null;
+};
+
+let cached = loadCache();
+let inflight = null;
+
+const saveCache = () => {
+  try {
+    fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
+    fs.writeFileSync(CACHE_FILE, JSON.stringify({ at: cached.at, data: cached.data }));
+  } catch {
+    // a cache write failure must never fail a read
+  }
+};
+
+/** One CLI run turned into a usage answer; never throws. */
+const fetchUsageData = async () => {
   const bin = resolveCli();
   const { error, stdout, stderr } = await runCli(bin);
 
@@ -223,6 +259,44 @@ const readUsage = async () => {
       ...(Object.keys(models).length > 0 ? { models } : {}),
     },
   };
+};
+
+/** Runs the CLI at most once at a time; a good answer becomes the new cache. */
+const refresh = () => {
+  if (inflight) return inflight;
+  const pending = (async () => {
+    const data = await fetchUsageData();
+    if (data.ok) {
+      cached = { data, at: Date.now() };
+      saveCache();
+      return data;
+    }
+    // A failed refresh keeps the last good answer; the error is reported only
+    // when nothing has ever read successfully.
+    return cached?.data ?? data;
+  })();
+  inflight = pending;
+  pending.finally(() => {
+    if (inflight === pending) inflight = null;
+  });
+  return pending;
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const readUsage = async () => {
+  if (cached && Date.now() - cached.at < FRESH_MS) return cached.data;
+  const pending = refresh();
+  // A stale answer is better than a timed-out one: hand it over and let the
+  // background refresh finish for the next call.
+  if (cached) return cached.data;
+  // Cold start with no history: wait, but never past the wire deadline.
+  const raced = await Promise.race([pending, sleep(ANSWER_WAIT_MS).then(() => null)]);
+  if (raced) return raced;
+  return failure(
+    `"${resolveCli()}" is still answering /usage — through a relay that can take ` +
+    'about half a minute. Refresh in a moment; the service keeps the next read.'
+  );
 };
 
 // ---------------- http ----------------
