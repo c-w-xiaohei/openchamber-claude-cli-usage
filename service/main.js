@@ -311,6 +311,15 @@ const fmtReset = (resetAt) => {
   return `resets ${date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
 };
 
+// Row and control ids must match /^[a-z][a-z0-9-]{0,39}$/ or the host schema
+// refuses the whole view ("The extension's service sent something the app
+// can't show"). Model names arrive as display strings ("Claude Opus 4.6"),
+// so they are slugged before they go near an id.
+const slug = (text, fallback = 'x') => {
+  const clean = String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+  return clean || fallback;
+};
+
 const windowRow = (id, label, window) => {
   const used = window?.usedPercent ?? null;
   const row = {
@@ -346,11 +355,11 @@ const statusView = () => {
   }
 
   for (const [key, window] of Object.entries(usage.windows ?? {})) {
-    rows.push(windowRow(`w-${key}`, WINDOW_TITLES[key] ?? key, window));
+    rows.push(windowRow(`w-${slug(key)}`, WINDOW_TITLES[key] ?? key, window));
   }
   for (const [model, entry] of Object.entries(usage.models ?? {})) {
     for (const [key, window] of Object.entries(entry.windows ?? {})) {
-      rows.push(windowRow(`m-${model}-${key}`, `${model} · ${WINDOW_TITLES[key] ?? key}`, window));
+      rows.push(windowRow(`m-${slug(model)}-${slug(key)}`, `${model} · ${WINDOW_TITLES[key] ?? key}`, window));
     }
   }
 
