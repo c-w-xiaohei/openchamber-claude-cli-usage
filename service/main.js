@@ -262,10 +262,13 @@ const fetchUsageData = async () => {
 };
 
 /** Runs the CLI at most once at a time; a good answer becomes the new cache. */
+let lastAttempt = null; // { at, ok, error }
+
 const refresh = () => {
   if (inflight) return inflight;
   const pending = (async () => {
     const data = await fetchUsageData();
+    lastAttempt = { at: Date.now(), ok: Boolean(data?.ok), error: data?.ok ? null : (data?.error ?? 'unknown') };
     if (data.ok) {
       cached = { data, at: Date.now() };
       saveCache();
@@ -283,6 +286,89 @@ const refresh = () => {
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// ---------------- Work Status view ----------------
+
+const WINDOW_TITLES = {
+  '5h': 'Session (5h)',
+  '7d': 'Weekly',
+  '1d': 'Daily',
+  monthly: 'Monthly',
+  extra_usage: 'Extra usage',
+  credits_balance: 'Credits',
+};
+
+const percentTone = (percent) =>
+  percent === null || percent === undefined ? 'muted'
+    : percent >= 90 ? 'error'
+    : percent >= 75 ? 'warning'
+    : 'default';
+
+const fmtReset = (resetAt) => {
+  if (!resetAt) return null;
+  const date = new Date(resetAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return `resets ${date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+};
+
+const windowRow = (id, label, window) => {
+  const used = window?.usedPercent ?? null;
+  const row = {
+    kind: 'line',
+    id,
+    label,
+    dot: percentTone(used),
+    tooltip: [window?.valueLabel, fmtReset(window?.resetAt)].filter(Boolean).join(' · ') || undefined,
+    value: used !== null
+      ? `${Math.round(used)}%`
+      : (window?.valueLabel ?? '—'),
+    valueTone: percentTone(used),
+  };
+  if (used !== null) row.content = { kind: 'bar', value: used, tone: percentTone(used) };
+  return row;
+};
+
+/** The `GuestStatusView` the Work Status section draws from the last read. */
+const statusView = () => {
+  const usage = cached?.data?.usage ?? null;
+  const rows = [];
+
+  if (!usage) {
+    rows.push({
+      kind: 'note',
+      id: 'empty',
+      text: lastAttempt?.error
+        ? `Claude CLI usage: ${lastAttempt.error}`
+        : `Claude CLI usage: first read in progress via ${path.basename(resolveCli())}`,
+      tone: lastAttempt?.error ? 'warning' : 'muted',
+    });
+    return { rows };
+  }
+
+  for (const [key, window] of Object.entries(usage.windows ?? {})) {
+    rows.push(windowRow(`w-${key}`, WINDOW_TITLES[key] ?? key, window));
+  }
+  for (const [model, entry] of Object.entries(usage.models ?? {})) {
+    for (const [key, window] of Object.entries(entry.windows ?? {})) {
+      rows.push(windowRow(`m-${model}-${key}`, `${model} · ${WINDOW_TITLES[key] ?? key}`, window));
+    }
+  }
+
+  const fetchedAgo = cached ? Math.max(0, Math.round((Date.now() - cached.at) / 60000)) : null;
+  rows.push({
+    kind: 'line',
+    id: 'meta',
+    label: inflight ? 'refreshing…' : `${path.basename(resolveCli())}`,
+    value: fetchedAgo !== null ? (fetchedAgo < 1 ? 'just now' : `${fetchedAgo}m ago`) : undefined,
+    valueTone: 'muted',
+    tooltip: `${resolveCli()} · last read ${cached ? new Date(cached.at).toLocaleTimeString() : 'never'}`,
+    actions: [{ kind: 'button', id: 'refresh', label: 'Refresh', variant: 'outline' }],
+  });
+  if (lastAttempt && !lastAttempt.ok && lastAttempt.error) {
+    rows.push({ kind: 'note', id: 'last-error', text: lastAttempt.error, tone: 'warning' });
+  }
+  return { rows };
+};
 
 const readUsage = async () => {
   if (cached && Date.now() - cached.at < FRESH_MS) return cached.data;
@@ -324,6 +410,33 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
   if (req.method === 'GET' && url.pathname === '/health') {
     return send(res, 200, { ok: true });
+  }
+  // The Work Status section's `source` reads this path while the section is
+  // on screen (GET for rows, POST when a row control is activated).
+  if (url.pathname === '/status' && req.method === 'GET') {
+    refresh(); // keep the answer warm; a stale read still answers at once
+    return send(res, 200, statusView());
+  }
+  // Raw state for the panel page (not a status view).
+  if (url.pathname === '/status-json' && req.method === 'GET') {
+    return send(res, 200, {
+      ok: true,
+      cli: resolveCli(),
+      overrideFile: OVERRIDE_FILE,
+      inflight: Boolean(inflight),
+      cachedAt: cached?.at ?? null,
+      planLabel: cached?.data?.planLabel ?? null,
+      usage: cached?.data?.usage ?? null,
+      lastAttempt,
+      cacheFile: CACHE_FILE,
+    });
+  }
+  if (url.pathname === '/status' && req.method === 'POST') {
+    readBody(req).then(() => {
+      refresh();
+      send(res, 200, { ok: true });
+    }).catch(() => send(res, 500, { error: 'could not read the request' }));
+    return;
   }
   if (req.method === 'POST' && url.pathname === QUOTA_PATH) {
     readBody(req)
