@@ -311,6 +311,33 @@ const fmtReset = (resetAt) => {
   return `resets ${date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
 };
 
+/** Compact reset time for a narrow row: "7:07 PM" today, "Mon 8:00 AM" this week, "Nov 23, 8:00 AM" beyond. */
+const fmtResetShort = (resetAt) => {
+  if (!resetAt) return null;
+  const date = new Date(resetAt);
+  const now = new Date();
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+  if (resetAt - now.getTime() < 7 * 24 * 3600 * 1000) {
+    return date.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  }
+  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
+
+/** "in 4h 12m" / "in 2d 5h" — how long until the window resets. */
+const fmtCountdown = (resetAt) => {
+  if (!resetAt) return null;
+  const mins = Math.round((resetAt - Date.now()) / 60000);
+  if (mins <= 0) return 'now';
+  const h = Math.floor(mins / 60);
+  const d = Math.floor(h / 24);
+  if (d > 0) return `in ${d}d ${h % 24}h`;
+  if (h > 0) return `in ${h}h ${mins % 60}m`;
+  return `in ${mins}m`;
+};
+
 // Row and control ids must match /^[a-z][a-z0-9-]{0,39}$/ or the host schema
 // refuses the whole view ("The extension's service sent something the app
 // can't show"). Model names arrive as display strings ("Claude Opus 4.6"),
@@ -322,10 +349,15 @@ const slug = (text, fallback = 'x') => {
 
 const windowRow = (id, label, window) => {
   const used = window?.usedPercent ?? null;
+  const resetShort = fmtResetShort(window?.resetAt);
+  const countdown = fmtCountdown(window?.resetAt);
+  const resetText = resetShort
+    ? countdown ? ` · ${resetShort} · ${countdown}` : ` · ${resetShort}`
+    : '';
   const row = {
     kind: 'line',
     id,
-    label,
+    label: `${label}${resetText}`,
     dot: percentTone(used),
     tooltip: [window?.valueLabel, fmtReset(window?.resetAt)].filter(Boolean).join(' · ') || undefined,
     value: used !== null
@@ -357,11 +389,8 @@ const statusView = () => {
   for (const [key, window] of Object.entries(usage.windows ?? {})) {
     rows.push(windowRow(`w-${slug(key)}`, WINDOW_TITLES[key] ?? key, window));
   }
-  for (const [model, entry] of Object.entries(usage.models ?? {})) {
-    for (const [key, window] of Object.entries(entry.windows ?? {})) {
-      rows.push(windowRow(`m-${slug(model)}-${slug(key)}`, `${model} · ${WINDOW_TITLES[key] ?? key}`, window));
-    }
-  }
+  // Per-model windows (e.g. "Current week (Fable)") stay in the /quota answer
+  // for the Usage page card; the compact section leaves them out.
 
   const fetchedAgo = cached ? Math.max(0, Math.round((Date.now() - cached.at) / 60000)) : null;
   rows.push({
