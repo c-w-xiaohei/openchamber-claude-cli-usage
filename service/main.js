@@ -311,31 +311,31 @@ const fmtReset = (resetAt) => {
   return `resets ${date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
 };
 
-/** Compact reset time for a narrow row: "7:07 PM" today, "Mon 8:00 AM" this week, "Nov 23, 8:00 AM" beyond. */
+/** Compact reset time for the grid row: "17:20" today, "Fri 08:00" this week, "Nov 23 08:00" beyond. */
+const pad2 = (n) => String(n).padStart(2, '0');
 const fmtResetShort = (resetAt) => {
   if (!resetAt) return null;
-  const date = new Date(resetAt);
+  const d = new Date(resetAt);
+  if (Number.isNaN(d.getTime())) return null;
+  const hm = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   const now = new Date();
-  if (Number.isNaN(date.getTime())) return null;
-  if (date.toDateString() === now.toDateString()) {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  }
-  if (resetAt - now.getTime() < 7 * 24 * 3600 * 1000) {
-    return date.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-  }
-  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return hm;
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'short' });
+  if (resetAt - now.getTime() < 7 * 24 * 3600 * 1000) return `${weekday} ${hm}`;
+  const md = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${md} ${hm}`;
 };
 
-/** "in 4h 12m" / "in 2d 5h" — how long until the window resets. */
+/** "2h25m" / "3d17h" / "45m" — compact countdown, no spaces. */
 const fmtCountdown = (resetAt) => {
   if (!resetAt) return null;
   const mins = Math.round((resetAt - Date.now()) / 60000);
   if (mins <= 0) return 'now';
   const h = Math.floor(mins / 60);
   const d = Math.floor(h / 24);
-  if (d > 0) return `in ${d}d ${h % 24}h`;
-  if (h > 0) return `in ${h}h ${mins % 60}m`;
-  return `in ${mins}m`;
+  if (d > 0) return `${d}d${pad2(h % 24)}h`;
+  if (h > 0) return `${h}h${pad2(mins % 60)}m`;
+  return `${mins}m`;
 };
 
 // Row and control ids must match /^[a-z][a-z0-9-]{0,39}$/ or the host schema
@@ -348,29 +348,29 @@ const slug = (text, fallback = 'x') => {
 };
 
 /**
- * One window = one bar line + one muted note under it. The bar line stays
- * short ("Session (5h)" · 20%) so nothing truncates; the note carries the
- * reset moment and the countdown ("resets 5:20 PM · in 2h 41m").
+ * One window = one line, grid-aligned by the host's own row layout:
+ * dot | short name | bar | right-aligned value. The value carries the
+ * percent and the reset moment ("20% →5:20 PM"); the countdown and full
+ * reset time stay on the tooltip.
  */
-const windowRows = (id, label, window) => {
+const windowRow = (id, label, window) => {
   const used = window?.usedPercent ?? null;
-  const rows = [{
-    kind: 'line',
-    id: `${id}-bar`,
-    label,
-    dot: percentTone(used),
-    tooltip: [window?.valueLabel, fmtReset(window?.resetAt)].filter(Boolean).join(' · ') || undefined,
-    value: used !== null
-      ? `${Math.round(used)}%`
-      : (window?.valueLabel ?? '—'),
-    valueTone: percentTone(used),
-  }];
-  if (used !== null) rows[0].content = { kind: 'bar', value: used, tone: percentTone(used) };
   const resetShort = fmtResetShort(window?.resetAt);
   const countdown = fmtCountdown(window?.resetAt);
-  const note = [resetShort && `resets ${resetShort}`, countdown].filter(Boolean).join(' · ');
-  if (note) rows.push({ kind: 'note', id: `${id}-reset`, text: note, tone: 'muted' });
-  return rows;
+  const mid = [resetShort && `→${resetShort}`, countdown].filter(Boolean).join(' ');
+  const value = used !== null ? `${Math.round(used)}%` : (window?.valueLabel ?? '—');
+  const row = {
+    kind: 'line',
+    id,
+    label: mid ? `${label} ${mid}` : label,
+    dot: percentTone(used),
+    tooltip: [fmtReset(window?.resetAt), countdown && `resets in ${countdown}`, window?.valueLabel]
+      .filter(Boolean).join(' · ') || undefined,
+    value,
+    valueTone: percentTone(used),
+  };
+  if (used !== null) row.content = { kind: 'bar', value: used, tone: percentTone(used) };
+  return row;
 };
 
 /** The `GuestStatusView` the Work Status section draws from the last read. */
@@ -391,7 +391,7 @@ const statusView = () => {
   }
 
   for (const [key, window] of Object.entries(usage.windows ?? {})) {
-    rows.push(...windowRows(`w-${slug(key)}`, WINDOW_TITLES[key] ?? key, window));
+    rows.push(windowRow(`w-${slug(key)}`, WINDOW_TITLES[key] ?? key, window));
   }
   // Per-model windows (e.g. "Current week (Fable)") stay in the /quota answer
   // for the Usage page card; the compact section leaves them out.
