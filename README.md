@@ -15,11 +15,13 @@ stdio relay — and parses the report.
 
 - Registers a quota provider `ext-claude-cli-usage`, shown as a **Claude CLI**
   card on the Usage page, in the header and in Work Status.
-- Draws a **Claude usage** section inside the Work Status panel through
-  `contributes.statusSection.source`: per-window bars (Session 5h, Weekly,
-  per-model weekly, extra usage) with a manual Refresh button. The host reads
-  `GET /status` every 60 s while the section is on screen.
-  last-read age and the same window bars, read from `GET /status-json`.
+- Draws two aligned rows inside Work Status through
+  `contributes.statusSection.entry`. A shared five-column CSS Grid shows
+  window (`5h` / `7d`), local reset time (`MM-DD HH:mm`), countdown, a short
+  progress bar, and percentage. Per-model rows are omitted.
+- Uses the official SDK's `connectHost` and `applyHostReady` for communication,
+  theme, fonts, and sizing. Refresh lives in the section header; hovering the
+  grid shows the last update time. There is no independent rail panel.
 - On each read the host spawns `service/main.js` and posts `usage.read`; the
   service runs `<cli> -p "/usage" --output-format json` and maps the report
   onto the built-in window names so the card looks like a built-in's:

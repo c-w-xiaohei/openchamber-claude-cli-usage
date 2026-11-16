@@ -1,7 +1,14 @@
 {
   "name": "@user/claude-cli-usage",
-  "version": "1.1.8",
+  "version": "1.2.0",
   "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/status/main.js --target browser --format iife --outfile status/main.js --minify"
+  },
+  "devDependencies": {
+    "@openchamber/sdk": "2.7.0"
+  },
   "openchamber": {
     "apiVersion": 1,
     "engines": {
@@ -14,10 +21,8 @@
         "icon": "pulse"
       },
       "statusSection": {
-        "source": {
-          "path": "/status",
-          "interval": 60000
-        },
+        "entry": "status/index.html",
+        "height": 52,
         "title": "Claude usage",
         "defaultExpanded": true
       },
