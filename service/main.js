@@ -295,6 +295,15 @@ const refresh = () => {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// The page polls cheap cached reads; the service itself decides when the CLI
+// runs, so the schedule does not depend on a timer inside a throttled iframe.
+// A failed attempt also counts, so an unreachable CLI is not retried every poll.
+const AUTO_REFRESH_MS = 60_000;
+const refreshIfDue = () => {
+  const last = Math.max(cached?.at ?? 0, lastAttempt?.at ?? 0);
+  if (!inflight && Date.now() - last >= AUTO_REFRESH_MS) refresh();
+};
+
 // ---------------- Work Status view ----------------
 
 const WINDOW_TITLES = {
@@ -478,6 +487,7 @@ const server = http.createServer((req, res) => {
   }
   // Raw state for the panel page (not a status view).
   if (url.pathname === '/status-json' && req.method === 'GET') {
+    refreshIfDue();
     return send(res, 200, {
       ok: true,
       cli: resolveCli(),

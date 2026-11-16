@@ -163,9 +163,9 @@ host.onReady((context) => {
   if (started) { render(); return; }
   started = true;
   void poll(true);
-  // Cached status reads do not spawn the CLI. Start one refresh per minute.
+  // Each read also lets the service start its own refresh once the data is a
+  // minute old, so no separate forced timer is needed here.
   setInterval(() => { void poll(); }, 5000);
-  setInterval(() => { void poll(true); }, 60000);
   setInterval(() => { if (visible() && snapshot) render(); }, 1000);
 });
 document.addEventListener('visibilitychange', () => { if (started && visible()) void poll(); });
