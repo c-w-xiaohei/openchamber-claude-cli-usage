@@ -21,8 +21,9 @@ stdio relay — and parses the report.
   bar, and percentage. Text columns have fixed widths; the bar fills the
   remaining space. Per-model rows are omitted.
 - Uses the official SDK's `connectHost` and `applyHostReady` for communication,
-  theme, fonts, and sizing. Refresh lives in the section header; hovering the
-  grid shows the last update time. There is no independent rail panel.
+  theme, fonts, and sizing. A compact refresh icon above the rows spins while
+  the CLI is reading. Quiet text shows `Updated 2 min ago`; after five minutes
+  it suggests refreshing. There is no independent rail panel.
 - On each read the host spawns `service/main.js` and posts `usage.read`; the
   service runs `<cli> -p "/usage" --output-format json` and maps the report
   onto the built-in window names so the card looks like a built-in's:
@@ -33,6 +34,9 @@ stdio relay — and parses the report.
 - `resetAt` accepts both whole-hour and minute formats, such as `11am` and
   `11:59am`, with the optional `(America/Los_Angeles)` zone; the year is
   inferred. Incomplete timestamps stay unknown instead of becoming midnight.
+- Invalid calendar dates, malformed zones, ambiguous or nonexistent DST
+  times, and implausible year rollovers stay unknown. An expired reset shows
+  `—` until refreshed; it does not claim the data has just reset.
 - Host `usage.read` has a 20 s deadline but a CLI behind a relay can take
   ~30 s, so reads answer from the last good result
   (`~/.config/claude-cli-usage/last-usage.json`, fresh for 60 s) and the CLI

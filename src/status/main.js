@@ -5,16 +5,23 @@ const host = connectHost();
 const root = document.getElementById('root');
 const grid = document.getElementById('usage');
 const message = document.getElementById('message');
+const refreshButton = document.getElementById('refresh');
+const updated = document.getElementById('updated');
 const cells = new Map();
 let snapshot = null;
 let reading = false;
 let started = false;
 let locale = 'en';
-let controlsKey = '';
+let requestingRefresh = false;
 let height = -1;
 
 const pad = (value) => String(value).padStart(2, '0');
 const validTime = (value) => typeof value === 'number' && Number.isFinite(value) && value > 0;
+const freshness = (cachedAt, now = Date.now()) => {
+  if (typeof cachedAt !== 'number' || !Number.isFinite(cachedAt) || cachedAt <= 0) return { label: 'Not updated yet', stale: false };
+  const minutes = Math.max(0, Math.floor((now - cachedAt) / 60000));
+  return { label: `Updated ${minutes < 1 ? '<1' : minutes} min ago`, stale: minutes >= 5 };
+};
 const resetLabel = (value) => {
   if (!validTime(value)) return '—';
   const date = new Date(value);
@@ -26,7 +33,7 @@ const remaining = (value) => {
   const hours = Math.floor(minutes / 60);
   if (hours >= 24) return `${Math.floor(hours / 24)}d${pad(hours % 24)}h`;
   if (hours) return `${hours}h${pad(minutes % 60)}m`;
-  return minutes ? `${minutes}m` : 'now';
+  return minutes ? `${minutes}m` : '—';
 };
 const cell = (className) => {
   const element = document.createElement('span');
@@ -63,15 +70,17 @@ for (const name of ['5h', '7d']) {
 }
 
 function publishControls() {
-  const updated = validTime(snapshot?.cachedAt)
-    ? new Date(snapshot.cachedAt).toLocaleString(locale)
-    : 'never';
-  grid.title = `Updated ${updated}${snapshot?.lastAttempt?.error ? `\n${snapshot.lastAttempt.error}` : ''}`;
-  const controls = [{ kind: 'button', id: 'refresh', label: 'Refresh', disabled: Boolean(snapshot?.inflight) }];
-  const key = JSON.stringify(controls);
-  if (key === controlsKey) return;
-  controlsKey = key;
-  void host.setStatusControls(controls).catch(() => { controlsKey = ''; });
+  const age = freshness(snapshot?.cachedAt);
+  const busy = requestingRefresh || Boolean(snapshot?.inflight);
+  const ageLabel = `${age.label}${age.stale ? '; refresh suggested' : ''}`;
+  if (updated.textContent !== ageLabel) updated.textContent = ageLabel;
+  updated.dataset.stale = String(age.stale);
+  const fullTime = validTime(snapshot?.cachedAt) ? new Date(snapshot.cachedAt).toLocaleString(locale) : 'never';
+  const detail = `Updated ${fullTime}${snapshot?.lastAttempt?.error ? `\n${snapshot.lastAttempt.error}` : ''}`;
+  updated.title = detail;
+  refreshButton.title = `${busy ? 'Refreshing usage…' : 'Refresh usage'}\n${detail}`;
+  refreshButton.disabled = busy;
+  refreshButton.setAttribute('aria-busy', String(busy));
 }
 
 function render() {
@@ -111,6 +120,7 @@ function visible() {
 async function poll(force = false) {
   if (reading || !visible()) return;
   reading = true;
+  if (force) { requestingRefresh = true; publishControls(); }
   try {
     if (force) {
       const result = await host.serviceRequest({ method: 'POST', path: '/status', body: JSON.stringify({ id: 'refresh' }) });
@@ -123,20 +133,22 @@ async function poll(force = false) {
     snapshot = next;
     render();
   } catch (error) {
+    if (snapshot) snapshot.inflight = false;
     message.hidden = false;
     message.dataset.error = 'true';
     message.textContent = error instanceof Error ? error.message : 'Could not read usage.';
   } finally {
     reading = false;
+    requestingRefresh = false;
+    publishControls();
   }
 }
 
-host.onStatusControl((event) => { if (event.id === 'refresh') void poll(true); });
-host.onDirectory(() => { controlsKey = ''; if (started) publishControls(); });
+refreshButton.addEventListener('click', () => { void poll(true); });
 host.onReady((context) => {
   applyHostReady(context, document.documentElement);
   locale = context.locale || 'en';
-  controlsKey = '';
+  void host.setStatusControls([]).catch(() => {});
   if (started) { render(); return; }
   started = true;
   void poll(true);

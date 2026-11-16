@@ -45,7 +45,7 @@ const FRESH_MS = 60_000;
 const OVERRIDE_FILE = path.join(os.homedir(), '.config', 'claude-cli-usage', 'cli-path');
 const CACHE_FILE = path.join(os.homedir(), '.config', 'claude-cli-usage', 'last-usage.json');
 // Older entries can contain midnight substituted for an unparsed whole hour.
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 const SESSION_WINDOW_SECONDS = 5 * 60 * 60;
 const WEEKLY_WINDOW_SECONDS = 7 * 24 * 60 * 60;
@@ -96,35 +96,41 @@ const tzOffsetMs = (timeZone, utcMs) => {
   return asUTC - utcMs;
 };
 
-/**
- * "Nov 16, 1:19am" plus an optional "(America/Los_Angeles)" → epoch ms.
- * The CLI prints no year, so both adjacent years are tried and the first
- * plausible one (not deeper than ~2 days in the past) wins.
- */
+/** Validate calendar fields and round-trip timezone candidates across DST. */
 const parseResetAt = (monthName, day, hour12, minute, ampm, timeZone) => {
-  const month = MONTHS[monthName.slice(0, 3).toLowerCase()];
+  const month = MONTHS[monthName.toLowerCase()];
   if (month === undefined) return null;
   let hour = Number(hour12) % 12;
   if (/pm/i.test(ampm)) hour += 12;
   const now = Date.now();
-  for (const year of [new Date(now).getFullYear(), new Date(now).getFullYear() + 1]) {
-    let utcMs = Date.UTC(year, month, Number(day), hour, Number(minute));
+  const currentYear = new Date(now).getUTCFullYear();
+  const candidates = [];
+  for (const year of [currentYear - 1, currentYear, currentYear + 1]) {
+    const wall = Date.UTC(year, month, Number(day), hour, Number(minute));
+    const date = new Date(wall);
+    if (date.getUTCMonth() !== month || date.getUTCDate() !== Number(day)) continue;
+    let matches = [wall];
     if (timeZone) {
       try {
-        utcMs -= tzOffsetMs(timeZone, utcMs);
-      } catch {
-        return null; // zone name we cannot resolve — drop the reset time
-      }
+        // The day on either side samples both offsets around a DST change.
+        const offsets = new Set([-86400000, 0, 86400000].map(delta => tzOffsetMs(timeZone, wall + delta)));
+        matches = [...offsets].map(offset => wall - offset)
+          .filter(candidate => candidate + tzOffsetMs(timeZone, candidate) === wall);
+      } catch { return null; }
     }
-    if (utcMs > now - 2 * 24 * 3600 * 1000) return utcMs;
+    // Missing local times and ambiguous repeated times must stay unknown.
+    if (matches.length !== 1) continue;
+    const candidate = matches[0];
+    // Neither a stale reset nor a missing year may imply a reset next year.
+    if (candidate >= now - 2 * 86400000 && candidate <= now + 8 * 86400000) candidates.push(candidate);
   }
-  return null;
+  return candidates.sort((a, b) => Math.abs(a - now) - Math.abs(b - now))[0] ?? null;
 };
 
 const USAGE_LINE =
   /^(current session|current week(?:\s*\(([^)]*)\))?|extra usage)\s*:\s*(?:(\d+(?:\.\d+)?)%\s*used)?(.*?)$/i;
 const RESET_PART =
-  /resets?\s+([A-Za-z]+)\s+(\d{1,2}),?\s+(1[0-2]|[1-9])(?::([0-5]\d))?\s*(am|pm)\b(?:\s*\(([^)]+)\))?/i;
+  /resets?\s+([A-Za-z]+)\s+(\d{1,2}),?\s+(1[0-2]|[1-9])(?::([0-5]\d))?\s*(am|pm)\b(?:\s*\(([^)]+)\))?\s*$/i;
 const MONEY_PART = /\$\s*([\d,]+(?:\.\d+)?)(?:\s*\/\s*\$\s*([\d,]+(?:\.\d+)?))?/;
 
 /**

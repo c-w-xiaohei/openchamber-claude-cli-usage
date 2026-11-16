@@ -9,10 +9,13 @@ class ReadingDate extends Date {
   constructor(...args) { super(...(args.length ? args : ['2026-11-16T19:25:00Z'])); }
   static now() { return Date.parse('2026-11-16T19:25:00Z'); }
 }
-const parse = (input) => vm.runInNewContext(`${parser}\nparseUsageText(input)`, {
+const parse = (input, at = ReadingDate.now()) => vm.runInNewContext(`${parser}\nparseUsageText(input)`, {
   input,
   Intl,
-  Date: ReadingDate,
+  Date: class extends Date {
+    constructor(...args) { super(...(args.length ? args : [at])); }
+    static now() { return at; }
+  },
   SESSION_WINDOW_SECONDS: 18000,
   WEEKLY_WINDOW_SECONDS: 604800,
 });
@@ -53,9 +56,52 @@ test('ignores cache entries written by the broken reset parser', () => {
   const load = () => vm.runInNewContext(`${cacheReader}\nloadCache()`, {
     fs: { readFileSync: () => JSON.stringify(stored) },
     CACHE_FILE: 'unused',
-    CACHE_VERSION: 2,
+    CACHE_VERSION: 3,
   });
   expect(load()).toBeNull();
-  stored.version = 2;
+  stored.version = 3;
   expect(load()?.data.ok).toBe(true);
+});
+
+for (const reset of [
+  'Feb 30, 12pm (America/Los_Angeles)',
+  'Nov 0, 12pm (America/Los_Angeles)',
+  'Novgarbage 16, 12pm (America/Los_Angeles)',
+  'Nov 16, 12pm (America/Los_Angeles',
+]) {
+  test(`rejects invalid or incomplete reset: ${reset}`, () => {
+    expect(parse(`Current session: 30% used · resets ${reset}`).windows['5h'].resetAt).toBeNull();
+  });
+}
+
+for (const [name, at, reset, expected] of [
+  ['previous year', '2027-01-01T09:00:00Z', 'Dec 31, 11pm', '2027-01-01T07:00:00Z'],
+  ['next year', '2026-12-31T23:00:00Z', 'Jan 1, 12am', '2027-01-01T08:00:00Z'],
+  ['spring daylight saving', '2026-03-08T07:00:00Z', 'Mar 8, 3:30am', '2026-03-08T10:30:00Z'],
+  ['autumn daylight saving', '2026-11-01T06:00:00Z', 'Nov 1, 2:30am', '2026-11-01T10:30:00Z'],
+]) {
+  test(`converts ${name} correctly`, () => {
+    expect(parse(`Current session: 30% used · resets ${reset} (America/Los_Angeles)`, Date.parse(at)).windows['5h'].resetAt)
+      .toBe(Date.parse(expected));
+  });
+}
+
+test('does not roll an old reset date forward a whole year', () => {
+  expect(parse('Current session: 30% used · resets Nov 16, 12pm (America/Los_Angeles)', Date.parse('2026-11-20T19:25:00Z')).windows['5h'].resetAt).toBeNull();
+});
+
+test('rejects a nonexistent local time in the spring DST gap', () => {
+  expect(parse('Current session: 30% used · resets Mar 8, 2:30am (America/Los_Angeles)', Date.parse('2026-03-08T07:00:00Z')).windows['5h'].resetAt).toBeNull();
+});
+
+test('rejects an ambiguous local time when daylight saving ends', () => {
+  expect(parse('Current session: 30% used · resets Nov 1, 1:30am (America/Los_Angeles)', Date.parse('2026-11-01T06:00:00Z')).windows['5h'].resetAt).toBeNull();
+});
+
+test('accepts a valid leap day', () => {
+  expect(parse('Current session: 30% used · resets Feb 29, 12pm (America/Los_Angeles)', Date.parse('2028-02-29T19:00:00Z')).windows['5h'].resetAt).toBe(Date.parse('2028-02-29T20:00:00Z'));
+});
+
+test('keeps existing behavior when no source timezone is provided', () => {
+  expect(parse('Current session: 30% used · resets Nov 16, 12pm').windows['5h'].resetAt).toBe(Date.parse('2026-11-16T12:00:00Z'));
 });
