@@ -5,22 +5,24 @@ const host = connectHost();
 const root = document.getElementById('root');
 const grid = document.getElementById('usage');
 const message = document.getElementById('message');
-const refreshButton = document.getElementById('refresh');
-const updated = document.getElementById('updated');
 const cells = new Map();
 let snapshot = null;
 let reading = false;
 let started = false;
 let locale = 'en';
 let requestingRefresh = false;
+let controlsKey = '';
+let spinTimer = null;
+let spinFrame = 0;
+const SPIN = ['◐', '◓', '◑', '◒'];
 let height = -1;
 
 const pad = (value) => String(value).padStart(2, '0');
 const validTime = (value) => typeof value === 'number' && Number.isFinite(value) && value > 0;
 const freshness = (cachedAt, now = Date.now()) => {
-  if (typeof cachedAt !== 'number' || !Number.isFinite(cachedAt) || cachedAt <= 0) return { label: '' };
+  if (typeof cachedAt !== 'number' || !Number.isFinite(cachedAt) || cachedAt <= 0) return { label: '', minutes: 0 };
   const minutes = Math.max(0, Math.floor((now - cachedAt) / 60000));
-  return { label: minutes < 1 ? '' : `${minutes}m ago` };
+  return { label: minutes < 1 ? '' : `${minutes}m ago`, minutes };
 };
 const resetLabel = (value) => {
   if (!validTime(value)) return '—';
@@ -69,18 +71,24 @@ for (const name of ['5h', '7d']) {
   cells.set(name, { row, reset, resetDate, resetTime, countdown, meter, fill, percent });
 }
 
+// The refresh control lives in the section header the host draws, so the
+// frame itself holds only the two rows. Header buttons take text only: the
+// glyph cycles while a read runs, then shows "↻" or "↻ 6m" (age after a full minute).
 function publishControls() {
-  const age = freshness(snapshot?.cachedAt);
   const busy = requestingRefresh || Boolean(snapshot?.inflight);
-  const ageLabel = age.label;
-  if (updated.textContent !== ageLabel) updated.textContent = ageLabel;
-  updated.hidden = !ageLabel;
-  const fullTime = validTime(snapshot?.cachedAt) ? new Date(snapshot.cachedAt).toLocaleString(locale) : 'never';
-  const detail = `Updated ${fullTime}${snapshot?.lastAttempt?.error ? `\n${snapshot.lastAttempt.error}` : ''}`;
-  updated.title = detail;
-  refreshButton.title = `${busy ? 'Refreshing usage…' : 'Refresh usage'}\n${detail}`;
-  refreshButton.disabled = busy;
-  refreshButton.setAttribute('aria-busy', String(busy));
+  if (busy && spinTimer === null) {
+    spinTimer = setInterval(() => { spinFrame = (spinFrame + 1) % SPIN.length; publishControls(); }, 250);
+  } else if (!busy && spinTimer !== null) {
+    clearInterval(spinTimer);
+    spinTimer = null;
+  }
+  const { minutes } = freshness(snapshot?.cachedAt);
+  const label = busy ? SPIN[spinFrame] : minutes >= 1 ? `↻ ${minutes}m` : '↻';
+  const controls = [{ kind: 'button', id: 'refresh', label, disabled: busy }];
+  const key = JSON.stringify(controls);
+  if (key === controlsKey) return;
+  controlsKey = key;
+  void host.setStatusControls(controls).catch(() => { controlsKey = ''; });
 }
 
 function render() {
@@ -144,11 +152,12 @@ async function poll(force = false) {
   }
 }
 
-refreshButton.addEventListener('click', () => { void poll(true); });
+host.onStatusControl((event) => { if (event.id === 'refresh') void poll(true); });
+host.onDirectory(() => { controlsKey = ''; if (started) publishControls(); });
 host.onReady((context) => {
   applyHostReady(context, document.documentElement);
   locale = context.locale || 'en';
-  void host.setStatusControls([]).catch(() => {});
+  controlsKey = '';
   if (started) { render(); return; }
   started = true;
   void poll(true);
