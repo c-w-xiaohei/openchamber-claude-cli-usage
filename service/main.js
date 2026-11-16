@@ -353,16 +353,25 @@ const slug = (text, fallback = 'x') => {
  * percent and the reset moment ("20% →5:20 PM"); the countdown and full
  * reset time stay on the tooltip.
  */
+/**
+ * Grid line: name | bar | "→reset countdown %" — the whole right side is one
+ * fixed-format value string so it never truncates the way a long label does.
+ * The countdown is padded to 5 chars so the →time column lines up whether
+ * the window is days or hours out.
+ */
+const padCountdown = (text) => (text ? text.padStart(5, ' ') : '     ');
 const windowRow = (id, label, window) => {
   const used = window?.usedPercent ?? null;
   const resetShort = fmtResetShort(window?.resetAt);
   const countdown = fmtCountdown(window?.resetAt);
-  const mid = [resetShort && `→${resetShort}`, countdown].filter(Boolean).join(' ');
-  const value = used !== null ? `${Math.round(used)}%` : (window?.valueLabel ?? '—');
+  const mid = resetShort ? `→${resetShort} ${padCountdown(countdown)}` : null;
+  const value = used !== null
+    ? `${mid ? `${mid} ` : ''}${Math.round(used)}%`
+    : (window?.valueLabel ?? '—');
   const row = {
     kind: 'line',
     id,
-    label: mid ? `${label} ${mid}` : label,
+    label,
     dot: percentTone(used),
     tooltip: [fmtReset(window?.resetAt), countdown && `resets in ${countdown}`, window?.valueLabel]
       .filter(Boolean).join(' · ') || undefined,
