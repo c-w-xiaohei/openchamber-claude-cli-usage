@@ -1,0 +1,33 @@
+{
+  "name": "@user/claude-cli-usage",
+  "version": "1.0.0",
+  "private": true,
+  "openchamber": {
+    "apiVersion": 1,
+    "engines": {
+      "openchamber": ">=2.6.0"
+    },
+    "contributes": {
+      "panel": {
+        "id": "claude-cli-usage",
+        "name": "Claude CLI",
+        "icon": "pulse"
+      },
+      "service": {
+        "entry": "service/main.js",
+        "runtime": "host",
+        "provides": [
+          "quota"
+        ],
+        "permissions": {
+          "exec": [
+            "claude"
+          ]
+        }
+      },
+      "quota": {
+        "providers": []
+      }
+    }
+  }
+}
