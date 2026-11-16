@@ -21,7 +21,7 @@ stdio relay — and parses the report.
   bar, and percentage. Text columns have fixed widths; the bar fills the
   remaining space. Per-model rows are omitted.
 - Uses the official SDK's `connectHost` and `applyHostReady` for communication,
-  theme, fonts, and sizing. A compact refresh icon above the rows spins while
+  theme, fonts, and sizing. A compact refresh icon below the rows spins while
   the CLI is reading. Quiet text shows `2m ago` after one full minute and
   stays hidden before that. The age stays muted even when an automatic
   refresh is delayed. There is no independent rail panel.

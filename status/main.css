@@ -3,9 +3,9 @@ html, body { margin: 0; background: transparent; color: var(--oc-fg); }
 body { font-family: var(--oc-font); }
 [hidden] { display: none !important; }
 #root { container-type: inline-size; padding: 0 .25rem; }
-.refresh-tools { display: flex; justify-content: flex-end; align-items: center; gap: .285714rem; min-height: 1.714286rem; }
+.refresh-tools { display: flex; justify-content: flex-end; align-items: center; gap: .285714rem; min-height: 1.285714rem; }
 .updated { color: var(--oc-muted); font-size: .785714rem; }
-#refresh { display: inline-flex; align-items: center; justify-content: center; width: 1.714286rem; height: 1.714286rem; padding: 0; border: 0; border-radius: var(--oc-radius); background: transparent; color: var(--oc-muted); cursor: pointer; }
+#refresh { display: inline-flex; align-items: center; justify-content: center; width: 1.285714rem; height: 1.285714rem; padding: 0; border: 0; border-radius: var(--oc-radius); background: transparent; color: var(--oc-muted); cursor: pointer; }
 #refresh:hover { background: var(--oc-hover); color: var(--oc-fg); }
 #refresh:focus-visible { outline: 2px solid var(--oc-focus); outline-offset: -2px; }
 #refresh:disabled { cursor: default; }
