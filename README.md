@@ -30,8 +30,9 @@ stdio relay — and parses the report.
   - `Current week (all models)` → `7d` window
   - `Current week (<Model>)` → per-model `7d` window
   - `Extra usage` → `extra_usage` window (`$used / $limit`)
-- `resetAt` is parsed from `resets <Mon> <D>, <h>:<mm><am|pm>` with the
-  optional `(America/Los_Angeles)` zone; the year is inferred.
+- `resetAt` accepts both whole-hour and minute formats, such as `11am` and
+  `11:59am`, with the optional `(America/Los_Angeles)` zone; the year is
+  inferred. Incomplete timestamps stay unknown instead of becoming midnight.
 - Host `usage.read` has a 20 s deadline but a CLI behind a relay can take
   ~30 s, so reads answer from the last good result
   (`~/.config/claude-cli-usage/last-usage.json`, fresh for 60 s) and the CLI

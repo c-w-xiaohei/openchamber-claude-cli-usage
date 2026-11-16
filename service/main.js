@@ -44,6 +44,8 @@ const ANSWER_WAIT_MS = 17_000;
 const FRESH_MS = 60_000;
 const OVERRIDE_FILE = path.join(os.homedir(), '.config', 'claude-cli-usage', 'cli-path');
 const CACHE_FILE = path.join(os.homedir(), '.config', 'claude-cli-usage', 'last-usage.json');
+// Older entries can contain midnight substituted for an unparsed whole hour.
+const CACHE_VERSION = 2;
 
 const SESSION_WINDOW_SECONDS = 5 * 60 * 60;
 const WEEKLY_WINDOW_SECONDS = 7 * 24 * 60 * 60;
@@ -122,7 +124,7 @@ const parseResetAt = (monthName, day, hour12, minute, ampm, timeZone) => {
 const USAGE_LINE =
   /^(current session|current week(?:\s*\(([^)]*)\))?|extra usage)\s*:\s*(?:(\d+(?:\.\d+)?)%\s*used)?(.*?)$/i;
 const RESET_PART =
-  /resets?\s+([A-Za-z]+)\s+(\d{1,2})(?:,\s*(\d{1,2}):(\d{2})\s*(am|pm))?(?:\s*\(([^)]+)\))?/i;
+  /resets?\s+([A-Za-z]+)\s+(\d{1,2}),?\s+(1[0-2]|[1-9])(?::([0-5]\d))?\s*(am|pm)\b(?:\s*\(([^)]+)\))?/i;
 const MONEY_PART = /\$\s*([\d,]+(?:\.\d+)?)(?:\s*\/\s*\$\s*([\d,]+(?:\.\d+)?))?/;
 
 /**
@@ -144,7 +146,7 @@ const parseUsageText = (text) => {
     matched += 1;
     const percent = percentRaw !== undefined ? Math.min(100, Math.max(0, Number(percentRaw))) : null;
     const rm = tail.match(RESET_PART);
-    const resetAt = rm ? parseResetAt(rm[1], rm[2], rm[3] ?? '12', rm[4] ?? '0', rm[5] ?? 'am', rm[6]) : null;
+    const resetAt = rm ? parseResetAt(rm[1], rm[2], rm[3], rm[4] ?? '0', rm[5], rm[6]) : null;
     const money = tail.match(MONEY_PART);
 
     const key = scope.toLowerCase();
@@ -198,7 +200,7 @@ const isUsageData = (data) =>
 const loadCache = () => {
   try {
     const stored = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
-    if (isUsageData(stored?.data) && Number.isFinite(stored?.at)) {
+    if (stored?.version === CACHE_VERSION && isUsageData(stored?.data) && Number.isFinite(stored?.at)) {
       return { data: stored.data, at: stored.at };
     }
   } catch {
@@ -213,7 +215,7 @@ let inflight = null;
 const saveCache = () => {
   try {
     fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
-    fs.writeFileSync(CACHE_FILE, JSON.stringify({ at: cached.at, data: cached.data }));
+    fs.writeFileSync(CACHE_FILE, JSON.stringify({ version: CACHE_VERSION, at: cached.at, data: cached.data }));
   } catch {
     // a cache write failure must never fail a read
   }
